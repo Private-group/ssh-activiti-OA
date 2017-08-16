@@ -1,0 +1,702 @@
+package com.sf.framework.server.base.dao;
+
+import com.sf.framework.base.IPage;
+import com.sf.framework.base.domain.IEntity;
+import com.sf.framework.core.Page;
+import com.sf.framework.core.exception.DaoException;
+import com.sf.framework.server.core.cache.ICache;
+import com.sf.framework.util.StringUtils;
+import java.lang.reflect.Field;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import org.hibernate.Criteria;
+import org.hibernate.HibernateException;
+import org.hibernate.Query;
+import org.hibernate.Session;
+import org.hibernate.SessionFactory;
+import org.hibernate.criterion.Criterion;
+import org.hibernate.criterion.DetachedCriteria;
+import org.hibernate.criterion.Example;
+import org.hibernate.criterion.Order;
+import org.hibernate.criterion.Projections;
+import org.hibernate.criterion.SQLCriterion;
+import org.hibernate.engine.TypedValue;
+import org.hibernate.impl.CriteriaImpl;
+import org.hibernate.impl.CriteriaImpl.CriterionEntry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.orm.hibernate3.HibernateCallback;
+import org.springframework.orm.hibernate3.HibernateTemplate;
+
+public class BaseEntityDao<E extends IEntity> extends BaseDao
+  implements IEntityDao<E>
+{
+  protected Logger log = LoggerFactory.getLogger(getClass());
+  protected final Class<E> entityClass;
+
+  public BaseEntityDao(Class<E> entityClass)
+  {
+    this.entityClass = entityClass;
+    if (entityClass == null)
+      throw new RuntimeException(getClass().getCanonicalName() + "未定义泛型! 继承于:" + BaseEntityDao.class.getCanonicalName() + 
+        "的类都必需声明所操作实体的泛型");
+  }
+
+  public BaseEntityDao()
+  {
+    this.entityClass = getInitEntityClass();
+    if (this.entityClass == null) {
+      String clsName = getClass().getSimpleName();
+      throw new RuntimeException(getClass().getCanonicalName() + "未定义泛型! 继承于:" + BaseEntityDao.class.getCanonicalName() + 
+        "的类都必需声明所操作实体的泛型, 如:\npublic class " + clsName + " extends " + BaseEntityDao.class.getSimpleName() + "<" + 
+        clsName.substring(0, clsName.length() - 3) + "> implements I" + clsName + "{\n\t...\n}");
+    }
+  }
+
+  protected Class<E> getInitEntityClass() {
+    Class cls = getEntityTypeFromClass(getClass());
+    if (cls == null) {
+      cls = getFirstGenericType(getClass());
+    }
+    return cls;
+  }
+
+  private Class<E> getFirstGenericType(Class<?> beanClass)
+  {
+    Type type = beanClass.getGenericSuperclass();
+    if ((type != null) && 
+      (ParameterizedType.class.isInstance(type))) {
+      ParameterizedType pType = (ParameterizedType)type;
+      Type argType = pType.getActualTypeArguments()[0];
+      if ((argType instanceof Class)) {
+        return (Class)argType;
+      }
+      return null;
+    }
+
+    return getFirstGenericType(beanClass.getSuperclass());
+  }
+
+  protected Class<E> getEntityTypeFromClass(Class<?> beanClass)
+  {
+    if (BaseEntityDao.class.isAssignableFrom(beanClass)) {
+      Type type = beanClass.getGenericSuperclass();
+      if ((type != null) && 
+        (ParameterizedType.class.isInstance(type))) {
+        ParameterizedType pType = (ParameterizedType)type;
+        if (pType.getRawType().equals(BaseEntityDao.class)) {
+          Type argType = pType.getActualTypeArguments()[0];
+          if ((argType instanceof Class)) {
+            return (Class)argType;
+          }
+          return null;
+        }
+      }
+
+      return getEntityTypeFromClass(beanClass.getSuperclass());
+    }
+    return null;
+  }
+
+  protected HibernateTemplate createHibernateTemplate(SessionFactory sessionFactory)
+  {
+    return new HibernateTemplateWrapper(sessionFactory);
+  }
+
+  protected HibernateTemplateWrapper getHibernateTemplateWrapper()
+  {
+    return (HibernateTemplateWrapper)getHibernateTemplate();
+  }
+
+  public Long save(E entity)
+    throws DaoException
+  {
+    return (Long)getHibernateTemplate().save(entity);
+  }
+
+  public void saveBatch(Collection<E> entities) throws DaoException {
+    for (IEntity entity : entities)
+      getHibernateTemplate().save(entity);
+  }
+
+  public void update(E entity) throws DaoException
+  {
+    getHibernateTemplate().update(entity);
+  }
+
+  public void updateBatch(Collection<E> entities) throws DaoException {
+    for (IEntity entity : entities)
+      getHibernateTemplate().update(entity);
+  }
+
+  public void saveOrUpdate(E entity) throws DaoException
+  {
+    super.getHibernateTemplate().saveOrUpdate(entity);
+  }
+
+  public void saveOrUpdateBatch(Collection<E> entities) throws DaoException {
+    getHibernateTemplate().saveOrUpdateAll(entities);
+  }
+
+  public void remove(E entity) throws DaoException {
+    getHibernateTemplate().delete(entity);
+  }
+
+  public void remove(Long id) throws DaoException {
+    getHibernateTemplate().delete(getHibernateTemplate().load(this.entityClass, id));
+  }
+
+  public int removeByIds(Collection<Long> ids) throws DaoException {
+    if ((ids == null) || (ids.size() == 0)) {
+      return 0;
+    }
+    String hqlString = "delete from " + this.entityClass.getName() + " where id in (:ids)";
+    return ((Integer)getHibernateTemplate().execute(new HibernateCallback(hqlString, ids) {
+      public Integer doInHibernate(Session session) throws HibernateException, SQLException {
+        Query query = session.createQuery(this.val$hqlString);
+        query.setParameterList("ids", this.val$ids);
+        return Integer.valueOf(query.executeUpdate());
+      }
+    })).intValue();
+  }
+
+  public void removeBatch(Collection<E> entities)
+    throws DaoException
+  {
+    super.getHibernateTemplate().deleteAll(entities);
+  }
+
+  public void removeBatch(String strCommand, List<Object> args) throws DaoException
+  {
+    if (args == null) {
+      args = new ArrayList();
+    }
+    removeBatch(getHibernateTemplate().find(strCommand, args.toArray()));
+  }
+
+  public E load(E entity) throws DaoException {
+    return (IEntity)getHibernateTemplate().get(this.entityClass, entity.getId());
+  }
+
+  public E load(Long id) throws DaoException {
+    return (IEntity)getHibernateTemplate().get(this.entityClass, id);
+  }
+
+  public E loadBy(String propertyName, String propertyValue) throws DaoException
+  {
+    List list = getHibernateTemplate().find("from " + this.entityClass.getName() + " where " + propertyName + " = ?", propertyValue);
+    if (list.size() > 0)
+      return (IEntity)list.get(0);
+    return null;
+  }
+
+  public List<E> find(String queryString) throws DaoException
+  {
+    return super.getHibernateTemplate().find(queryString);
+  }
+
+  public List<E> find(String queryString, List<Object> args) throws DaoException
+  {
+    return super.getHibernateTemplate().find(queryString, args == null ? new Object[0] : args.toArray());
+  }
+
+  public List<E> find(String queryString, List<Object> args, int pageSize, int pageIndex) throws DaoException
+  {
+    return (List)getHibernateTemplate().execute(new HibernateCallback(queryString, pageSize, pageIndex, args) {
+      public Object doInHibernate(Session session) throws HibernateException {
+        Query query = session.createQuery(this.val$queryString);
+        query.setFirstResult(this.val$pageSize * this.val$pageIndex);
+        query.setMaxResults(this.val$pageSize);
+        if ((this.val$args != null) && (this.val$args.size() > 0)) {
+          Object[] values = this.val$args.toArray();
+          for (int i = 0; i < values.length; i++) {
+            query.setParameter(i, values[i]);
+          }
+        }
+        return query.list();
+      }
+    });
+  }
+
+  public IPage<E> findPage(String queryString, List<Object> args, int pageSize, int pageIndex) throws DaoException
+  {
+    return (IPage)getHibernateTemplate().execute(new HibernateCallback(queryString, pageSize, pageIndex, args) {
+      public Object doInHibernate(Session session) throws HibernateException {
+        Query query = session.createQuery(this.val$queryString);
+        query.setFirstResult(this.val$pageSize * this.val$pageIndex);
+        query.setMaxResults(this.val$pageSize);
+        if ((this.val$args != null) && (this.val$args.size() > 0)) {
+          Object[] values = this.val$args.toArray();
+          for (int i = 0; i < values.length; i++) {
+            query.setParameter(i, values[i]);
+          }
+        }
+        return new Page(query.list(), BaseEntityDao.this.getCachedCount(this.val$pageIndex, this.val$queryString, this.val$args), this.val$pageSize, this.val$pageIndex);
+      }
+    });
+  }
+
+  protected int getCachedCount(int pageIndex, String queryString, Object args)
+    throws DaoException
+  {
+    Integer totalCount = null;
+    String key = null;
+    PageCountCache pc = PageCountCache.getInstance();
+    switch (pc.getCacheType()) {
+    case 0:
+      key = getSQLCachedKey(queryString, args);
+      totalCount = (Integer)pc.getCache().getData(key);
+      if (totalCount != null) break;
+      totalCount = Integer.valueOf(queryCount(queryString, args));
+      pc.getCache().setData(key, totalCount);
+
+      break;
+    case 1:
+      if (pageIndex > 0) {
+        key = getSQLCachedKey(queryString, args);
+        totalCount = (Integer)pc.getCache().getData(key);
+      }
+      if (totalCount != null) break;
+      if (key == null) {
+        key = getSQLCachedKey(queryString, args);
+      }
+      totalCount = Integer.valueOf(queryCount(queryString, args));
+      pc.getCache().setData(key, totalCount);
+
+      break;
+    default:
+      key = getSQLCachedKey(queryString, args);
+      pc.getCache().removeData(key);
+      totalCount = Integer.valueOf(queryCount(queryString, args));
+    }
+
+    return totalCount == null ? 0 : totalCount.intValue();
+  }
+
+  protected int getCachedCount(Criteria criteria, int pageIndex)
+    throws HibernateException
+  {
+    Integer totalCount = null;
+    try {
+      String key = null;
+      PageCountCache pc = PageCountCache.getInstance();
+
+      List orderEntrys = new ArrayList();
+      Field field = CriteriaImpl.class.getDeclaredField("orderEntries");
+      field.setAccessible(true);
+      orderEntrys = (List)field.get(criteria);
+      field.set(criteria, new ArrayList());
+
+      switch (pc.getCacheType()) {
+      case 0:
+        key = getCriteriaCachedKey(criteria);
+        totalCount = (Integer)pc.getCache().getData(key);
+        if (totalCount != null) break;
+        totalCount = Integer.valueOf(((Number)criteria.setProjection(Projections.rowCount()).uniqueResult()).intValue());
+        pc.getCache().setData(key, totalCount);
+
+        break;
+      case 1:
+        if (pageIndex > 0) {
+          key = getCriteriaCachedKey(criteria);
+          totalCount = (Integer)pc.getCache().getData(key);
+        }
+        if (totalCount != null) break;
+        if (key == null) {
+          key = getCriteriaCachedKey(criteria);
+        }
+        totalCount = Integer.valueOf(((Number)criteria.setProjection(Projections.rowCount()).uniqueResult()).intValue());
+        pc.getCache().setData(key, totalCount);
+
+        break;
+      default:
+        key = getCriteriaCachedKey(criteria);
+        pc.getCache().removeData(key);
+        totalCount = Integer.valueOf(((Number)criteria.setProjection(Projections.rowCount()).uniqueResult()).intValue());
+      }
+
+      criteria.setProjection(null);
+
+      field.set(criteria, orderEntrys);
+    } catch (HibernateException x) {
+      throw new HibernateException("exception when getCount", x);
+    } catch (Exception e) {
+      throw new HibernateException("exception when getCount", e);
+    }
+
+    return totalCount == null ? 0 : totalCount.intValue();
+  }
+
+  protected String getCriteriaCachedKey(Criteria criteria)
+  {
+    StringBuilder sb = new StringBuilder(criteria.toString());
+    Iterator itr = ((CriteriaImpl)criteria).iterateExpressionEntries();
+    while (itr.hasNext()) {
+      Criterion cr = ((CriteriaImpl.CriterionEntry)itr.next()).getCriterion();
+      if ((cr instanceof SQLCriterion)) {
+        SQLCriterion sc = (SQLCriterion)cr;
+        TypedValue[] tvs = sc.getTypedValues(null, null);
+        if (tvs != null) {
+          for (TypedValue tv : tvs) {
+            sb.append("|").append(tv.toString());
+          }
+        }
+      }
+    }
+    return sb.toString();
+  }
+
+  protected int queryCount(String queryString, Object args) throws DaoException
+  {
+    if ((args instanceof List)) {
+      List list = (List)args;
+      return count(queryString, list);
+    }if ((args instanceof Map)) {
+      Map map = (Map)args;
+      return count(queryString, map);
+    }
+    return count(queryString, args);
+  }
+
+  protected String getSQLCachedKey(String queryString, Object args)
+  {
+    StringBuilder sb = new StringBuilder(queryString);
+    if (args != null) {
+      sb.append("|").append(args.toString());
+    }
+    return sb.toString();
+  }
+
+  public int count(String queryString, List<Object> args) throws DaoException {
+    return ((Number)getHibernateTemplate().execute(new HibernateCallback(queryString, args) {
+      public Number doInHibernate(Session session) throws HibernateException {
+        Query query = session.createQuery(BaseEntityDao.this.getCountString(this.val$queryString));
+        if ((this.val$args != null) && (this.val$args.size() > 0)) {
+          Object[] values = this.val$args.toArray();
+          for (int i = 0; i < values.length; i++) {
+            query.setParameter(i, values[i]);
+          }
+        }
+        return (Number)query.uniqueResult();
+      }
+    })).intValue();
+  }
+
+  protected String getCountString(String queryString)
+  {
+    String tmp = queryString.trim();
+    if (tmp.toLowerCase().startsWith("from ")) {
+      return " select count(*) " + queryString;
+    }
+    if (!tmp.toLowerCase().startsWith("select"))
+      throw new RuntimeException(" the query not valid [" + queryString + "]");
+    int pos = queryString.toLowerCase().indexOf(" from ");
+    if (pos == -1)
+      throw new RuntimeException("the query not valid [" + queryString + "]");
+    String where = tmp.substring(pos);
+    String suffix = tmp.substring(7, pos);
+    String[] token = suffix.split(",");
+    String cntField = token[0];
+
+    return " select count(" + cntField + ") " + where;
+  }
+
+  public List<E> find(String queryString, Map<String, Object> args) throws DaoException
+  {
+    return (List)getHibernateTemplate().execute(new HibernateCallback(queryString, args) {
+      public Object doInHibernate(Session session) throws HibernateException {
+        Query query = session.createQuery(this.val$queryString);
+        query.setProperties(this.val$args);
+        return query.list();
+      }
+    });
+  }
+
+  public List<E> find(String queryString, Map<String, Object> args, int pageSize, int pageIndex) throws DaoException {
+    return (List)getHibernateTemplate().execute(new HibernateCallback(queryString, pageSize, pageIndex, args) {
+      public Object doInHibernate(Session session) throws HibernateException {
+        Query query = session.createQuery(this.val$queryString);
+        query.setFirstResult(this.val$pageSize * this.val$pageIndex);
+        query.setMaxResults(this.val$pageSize);
+        query.setProperties(this.val$args);
+        return query.list();
+      }
+    });
+  }
+
+  public IPage<E> findPage(String queryString, Map<String, Object> args, int pageSize, int pageIndex) throws DaoException {
+    return (IPage)getHibernateTemplate().execute(new HibernateCallback(queryString, pageSize, pageIndex, args) {
+      public Object doInHibernate(Session session) throws HibernateException {
+        Query query = session.createQuery(this.val$queryString);
+        query.setFirstResult(this.val$pageSize * this.val$pageIndex);
+        query.setMaxResults(this.val$pageSize);
+        query.setProperties(this.val$args);
+        return new Page(query.list(), BaseEntityDao.this.getCachedCount(this.val$pageIndex, this.val$queryString, this.val$args), this.val$pageSize, this.val$pageIndex);
+      } } );
+  }
+
+  public int count(String queryString, Map<String, Object> args) throws DaoException {
+    return ((Number)getHibernateTemplate().execute(new HibernateCallback(queryString, args) {
+      public Number doInHibernate(Session session) throws HibernateException {
+        Query query = session.createQuery(BaseEntityDao.this.getCountString(this.val$queryString));
+        query.setProperties(this.val$args);
+        return (Number)query.uniqueResult();
+      }
+    })).intValue();
+  }
+
+  public List<E> find(String queryString, Object args) throws DaoException
+  {
+    return (List)getHibernateTemplate().execute(new HibernateCallback(queryString, args) {
+      public Object doInHibernate(Session session) throws HibernateException {
+        Query query = session.createQuery(this.val$queryString);
+        query.setProperties(this.val$args);
+        return query.list();
+      }
+    });
+  }
+
+  public List<E> find(String queryString, Object args, int pageSize, int pageIndex) throws DaoException {
+    return (List)getHibernateTemplate().execute(new HibernateCallback(queryString, pageSize, pageIndex, args) {
+      public Object doInHibernate(Session session) throws HibernateException {
+        Query query = session.createQuery(this.val$queryString);
+        query.setFirstResult(this.val$pageSize * this.val$pageIndex);
+        query.setMaxResults(this.val$pageSize);
+        query.setProperties(this.val$args);
+        return query.list();
+      }
+    });
+  }
+
+  public IPage<E> findPage(String queryString, Object args, int pageSize, int pageIndex) throws DaoException {
+    return (IPage)getHibernateTemplate().execute(new HibernateCallback(queryString, pageSize, pageIndex, args) {
+      public Object doInHibernate(Session session) throws HibernateException {
+        Query query = session.createQuery(this.val$queryString);
+        query.setFirstResult(this.val$pageSize * this.val$pageIndex);
+        query.setMaxResults(this.val$pageSize);
+        query.setProperties(this.val$args);
+        return new Page(query.list(), BaseEntityDao.this.getCachedCount(this.val$pageIndex, this.val$queryString, this.val$args), this.val$pageSize, this.val$pageIndex);
+      } } );
+  }
+
+  public int count(String queryString, Object args) throws DaoException {
+    return ((Number)getHibernateTemplate().execute(new HibernateCallback(queryString, args) {
+      public Number doInHibernate(Session session) throws HibernateException {
+        Query query = session.createQuery(BaseEntityDao.this.getCountString(this.val$queryString));
+        query.setProperties(this.val$args);
+        return (Number)query.uniqueResult();
+      }
+    })).intValue();
+  }
+
+  public List<E> findBy(DetachedCriteria detachedCriteria) throws DaoException
+  {
+    return (List)getHibernateTemplate().execute(new HibernateCallback(detachedCriteria) {
+      public Object doInHibernate(Session session) throws HibernateException {
+        return this.val$detachedCriteria.getExecutableCriteria(session).list();
+      }
+    });
+  }
+
+  public List<E> findBy(DetachedCriteria detachedCriteria, int pageSize, int pageIndex) throws DaoException {
+    return (List)getHibernateTemplate().execute(new HibernateCallback(detachedCriteria, pageSize, pageIndex) {
+      public Object doInHibernate(Session session) throws HibernateException {
+        Criteria criteria = this.val$detachedCriteria.getExecutableCriteria(session);
+        criteria.setFirstResult(this.val$pageSize * this.val$pageIndex);
+        criteria.setMaxResults(this.val$pageSize);
+        return criteria.list();
+      }
+    });
+  }
+
+  public IPage<E> findPageBy(DetachedCriteria detachedCriteria, int pageSize, int pageIndex) throws DaoException
+  {
+    return (IPage)getHibernateTemplate().execute(new HibernateCallback(detachedCriteria, pageIndex, pageSize) {
+      public Object doInHibernate(Session session) throws HibernateException {
+        Criteria criteria = this.val$detachedCriteria.getExecutableCriteria(session);
+
+        Integer total = Integer.valueOf(BaseEntityDao.this.getCachedCount(criteria, this.val$pageIndex));
+        criteria.setFirstResult(this.val$pageSize * this.val$pageIndex);
+        criteria.setMaxResults(this.val$pageSize);
+        return new Page(criteria.list(), total.intValue(), this.val$pageSize, this.val$pageIndex);
+      }
+    });
+  }
+
+  public IPage<E> findPageBy(DetachedCriteria detachedCriteria, int pageSize, int pageIndex, String sortField, boolean isAsc)
+    throws DaoException
+  {
+    return (IPage)getHibernateTemplate().execute(new HibernateCallback(detachedCriteria, pageIndex, sortField, isAsc, pageSize) {
+      public Object doInHibernate(Session session) throws HibernateException {
+        Criteria criteria = this.val$detachedCriteria.getExecutableCriteria(session);
+
+        Integer total = Integer.valueOf(BaseEntityDao.this.getCachedCount(criteria, this.val$pageIndex));
+        if (StringUtils.isNotEmpty(this.val$sortField)) {
+          criteria.addOrder(this.val$isAsc ? Order.asc(this.val$sortField) : Order.desc(this.val$sortField));
+        }
+        criteria.setFirstResult(this.val$pageSize * this.val$pageIndex);
+        criteria.setMaxResults(this.val$pageSize);
+        return new Page(criteria.list(), total.intValue(), this.val$pageSize, this.val$pageIndex);
+      }
+    });
+  }
+
+  public int countBy(DetachedCriteria detachedCriteria) throws DaoException {
+    return ((Number)getHibernateTemplate().execute(new HibernateCallback(detachedCriteria) {
+      public Number doInHibernate(Session session) throws HibernateException {
+        Criteria criteria = this.val$detachedCriteria.getExecutableCriteria(session);
+        return (Number)criteria.setProjection(Projections.rowCount()).uniqueResult();
+      }
+    })).intValue();
+  }
+
+  public List<E> findBy(E entity) throws DaoException
+  {
+    return getHibernateTemplate().findByExample(entity);
+  }
+
+  public List<E> findBy(E entity, int pageSize, int pageIndex) throws DaoException
+  {
+    return getHibernateTemplate().findByExample(entity, pageSize * pageIndex, pageSize);
+  }
+
+  public IPage<E> findPageBy(E entity, int pageSize, int pageIndex) throws DaoException
+  {
+    return (IPage)getHibernateTemplate().execute(new HibernateCallback(entity, pageIndex, pageSize) {
+      public Object doInHibernate(Session session) throws HibernateException {
+        Criteria criteria = session.createCriteria(this.val$entity.getClass());
+        criteria.add(Example.create(this.val$entity));
+
+        Integer total = Integer.valueOf(BaseEntityDao.this.getCachedCount(criteria, this.val$pageIndex));
+        criteria.setFirstResult(this.val$pageSize * this.val$pageIndex);
+        criteria.setMaxResults(this.val$pageSize);
+        return new Page(criteria.list(), total.intValue(), this.val$pageSize, this.val$pageIndex);
+      }
+    });
+  }
+
+  public IPage<E> findPageBy(E entity, int pageSize, int pageIndex, String sortField, boolean isAsc) throws DaoException
+  {
+    return (IPage)getHibernateTemplate().execute(new HibernateCallback(entity, pageIndex, sortField, isAsc, pageSize) {
+      public Object doInHibernate(Session session) throws HibernateException {
+        Criteria criteria = session.createCriteria(this.val$entity.getClass());
+        criteria.add(Example.create(this.val$entity));
+        Integer total = Integer.valueOf(BaseEntityDao.this.getCachedCount(criteria, this.val$pageIndex));
+
+        if (StringUtils.isNotEmpty(this.val$sortField)) {
+          criteria.addOrder(this.val$isAsc ? Order.asc(this.val$sortField) : Order.desc(this.val$sortField));
+        }
+        criteria.setFirstResult(this.val$pageSize * this.val$pageIndex);
+        criteria.setMaxResults(this.val$pageSize);
+        return new Page(criteria.list(), total.intValue(), this.val$pageSize, this.val$pageIndex);
+      } } );
+  }
+
+  public int countBy(E entity) throws DaoException {
+    return ((Number)getHibernateTemplate().execute(new HibernateCallback(entity) {
+      public Number doInHibernate(Session session) throws HibernateException {
+        Criteria criteria = session.createCriteria(this.val$entity.getClass());
+        criteria.add(Example.create(this.val$entity));
+        return (Number)criteria.setProjection(Projections.rowCount()).uniqueResult();
+      }
+    })).intValue();
+  }
+
+  public List<E> findAll() throws DaoException
+  {
+    return (List)getHibernateTemplate().execute(new HibernateCallback() {
+      public Object doInHibernate(Session session) throws HibernateException {
+        Criteria criteria = session.createCriteria(BaseEntityDao.this.entityClass);
+        return criteria.list();
+      }
+    });
+  }
+
+  public List<E> findAll(int pageSize, int pageIndex) throws DaoException {
+    return (List)getHibernateTemplate().execute(new HibernateCallback(pageSize, pageIndex) {
+      public Object doInHibernate(Session session) throws HibernateException {
+        Criteria criteria = session.createCriteria(BaseEntityDao.this.entityClass);
+        criteria.setFirstResult(this.val$pageSize * this.val$pageIndex);
+        criteria.setMaxResults(this.val$pageSize);
+        return criteria.list();
+      }
+    });
+  }
+
+  public IPage<E> findPageAll(int pageSize, int pageIndex) throws DaoException
+  {
+    return (IPage)getHibernateTemplate().execute(new HibernateCallback(pageIndex, pageSize) {
+      public Object doInHibernate(Session session) throws HibernateException {
+        Criteria criteria = session.createCriteria(BaseEntityDao.this.entityClass);
+
+        Integer total = Integer.valueOf(BaseEntityDao.this.getCachedCount(criteria, this.val$pageIndex));
+        criteria.setFirstResult(this.val$pageSize * this.val$pageIndex);
+        criteria.setMaxResults(this.val$pageSize);
+        return new Page(BaseEntityDao.this.findAll(), total.intValue(), 100, this.val$pageIndex);
+      } } );
+  }
+
+  public int countAll() throws DaoException {
+    return ((Number)getHibernateTemplate().execute(new HibernateCallback() {
+      public Number doInHibernate(Session session) throws HibernateException {
+        Criteria criteria = session.createCriteria(BaseEntityDao.this.entityClass);
+        return (Number)criteria.setProjection(Projections.rowCount()).uniqueResult();
+      }
+    })).intValue();
+  }
+
+  public void execute(String queryString) throws DaoException {
+    getHibernateTemplate().execute(new HibernateCallback(queryString) {
+      public Number doInHibernate(Session session) throws HibernateException {
+        Query query = session.createQuery(this.val$queryString);
+        return Integer.valueOf(query.executeUpdate());
+      } } );
+  }
+
+  public void execute(String hql, List<Object> args) throws DaoException {
+    getHibernateTemplate().execute(new HibernateCallback(hql, args) {
+      public Number doInHibernate(Session session) throws HibernateException {
+        Query query = session.createQuery(this.val$hql);
+        if ((this.val$args != null) && (this.val$args.size() > 0)) {
+          Object[] values = this.val$args.toArray();
+          for (int i = 0; i < values.length; i++) {
+            query.setParameter(i, values[i]);
+          }
+        }
+        return Integer.valueOf(query.executeUpdate());
+      } } );
+  }
+
+  public void execute(String hql, Map<String, Object> args) throws DaoException {
+    getHibernateTemplate().execute(new HibernateCallback(hql, args) {
+      public Number doInHibernate(Session session) throws HibernateException {
+        Query query = session.createQuery(this.val$hql);
+        query.setProperties(this.val$args);
+        return Integer.valueOf(query.executeUpdate());
+      } } );
+  }
+
+  public void flush() {
+    getHibernateTemplate().flush();
+  }
+
+  public void evict(E entity)
+  {
+    getHibernateTemplate().evict(entity);
+  }
+
+  public boolean contains(E entity)
+  {
+    return getHibernateTemplate().contains(entity);
+  }
+
+  public E merge(E entity) {
+    return (IEntity)getHibernateTemplate().merge(entity);
+  }
+}

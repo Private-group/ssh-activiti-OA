@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:p="http://www.springframework.org/schema/p"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.0.xsd">
+
+	<bean id="dataSource" class="org.apache.commons.dbcp.BasicDataSource"
+		destroy-method="close">
+		<property name="driverClassName" value="com.mysql.jdbc.Driver" />
+		<property name="url" value="jdbc:mysql://127.0.0.1:3306/lindb" />
+		<property name="username" value="root" />
+		<property name="password" value="root" />
+		<property name="initialSize" value="20" />
+		<property name="maxActive" value="50" />
+		<property name="maxIdle" value="20" />
+		<property name="minIdle" value="10" />
+	</bean>
+
+	<bean id="sessionFactory"
+		class="org.springframework.orm.hibernate3.LocalSessionFactoryBean">
+		<property name="dataSource">
+			<ref bean="dataSource" />
+		</property>
+		<property name="hibernateProperties">
+			<props>
+				<prop key="hibernate.dialect">
+					org.hibernate.dialect.MySQLDialect
+				</prop>
+			</props>
+		</property>
+		<property name="mappingResources">
+			<list>
+				<value>test/entity/TsChartsInfo.hbm.xml</value>
+				<value>test/entity/QingJia.hbm.xml</value>
+				<value>test/entity/QingJiaHis.hbm.xml</value>
+			</list>
+		</property>
+	</bean>
+
+	<!-- 配置事务管理器 -->
+	<bean id="transactionManager"
+		class="org.springframework.orm.hibernate3.HibernateTransactionManager">
+		<property name="sessionFactory" ref="sessionFactory" />
+	</bean>
+
+
+	<!-- aop 开始 <bean id="beforeAdvice" class="test.aop.BeforeAdvice"></bean> 
+		<bean id="afterAdvice" class="test.aop.AfterAdvice"></bean> <bean id="compareInterceptor" 
+		class="test.aop.CompareInterceptor"></bean> <bean id="studenttarget" class="test.dao.StudentDao"></bean> 
+		<bean id="student" class="org.springframework.aop.framework.ProxyFactoryBean"> 
+		<property name="proxyInterfaces"> <value>test.dao.IStudent</value> </property> 
+		<property name="interceptorNames"> <list> <value>beforeAdvice</value> <value>afterAdvice</value> 
+		<value>compareInterceptor</value> </list> </property> <property name="target"> 
+		<ref bean="studenttarget" /> </property> </bean> -->
+	<!-- Activiti处理引擎的配置，交由Spring管理 -->
+	<!-- 加载activiti引擎 -->
+	<bean id="processEngine" class="org.activiti.spring.ProcessEngineFactoryBean">
+		<property name="processEngineConfiguration" ref="processEngineConfiguration" />
+	</bean>
+	<bean id="processEngineConfiguration" class="org.activiti.spring.SpringProcessEngineConfiguration">
+		<property name="dataSource" ref="dataSource" />
+		<property name="transactionManager" ref="transactionManager" />
+		<property name="databaseSchemaUpdate" value="true" />
+		<property name="jobExecutorActivate" value="false" />
+		<property name="deploymentResources" value="classpath*:/diagrams/*" />
+	</bean>
+	<!-- activiti的各种服务接口 -->
+	<bean id="repositoryService" factory-bean="processEngine"
+		factory-method="getRepositoryService" />
+	<bean id="runtimeService" factory-bean="processEngine"
+		factory-method="getRuntimeService" />
+	<bean id="taskService" factory-bean="processEngine"
+		factory-method="getTaskService" />
+	<bean id="historyService" factory-bean="processEngine"
+		factory-method="getHistoryService" />
+	<bean id="managementService" factory-bean="processEngine"
+		factory-method="getManagementService" />
+	<bean id="identityService" factory-bean="processEngine"
+		factory-method="getIdentityService" />
+
+
+
+	<!-- dao 开始 -->
+	<bean id="qingJiaDAO" class="test.dao.QingJiaDAO">
+		<property name="sessionFactory" ref="sessionFactory" />
+	</bean>
+
+	<bean id="qingJiaHisDAO" class="test.dao.QingJiaHisDAO">
+		<property name="sessionFactory" ref="sessionFactory" />
+	</bean>
+
+	<!-- service 开始 -->
+	<bean id="workFlowService" class="test.service.WorkFlowService">
+		<property name="repositoryService" ref="repositoryService"></property>
+		<property name="runtimeService" ref="runtimeService"></property>
+		<property name="taskService" ref="taskService"></property>
+		<property name="historyService" ref="historyService"></property>
+		<property name="identityService" ref="identityService"></property>
+
+	</bean>
+
+	<!-- action 开始 -->
+	<bean id="login" class="test.action.LoginAction" scope="prototype"></bean>
+	<bean id="getProcessAction" class="test.action.GetProcessPicAction"
+		scope="prototype">
+		<property name="workFlowService" ref="workFlowService"></property>
+	</bean>
+
+
+	<bean id="workFlow" class="test.action.WorkFlowAction" scope="prototype">
+		<property name="workFlowService" ref="workFlowService"></property>
+		<property name="qingJiaDAO" ref="qingJiaDAO"></property>
+		<property name="qingJiaHisDAO" ref="qingJiaHisDAO"></property>
+	</bean>
+
+	<bean id="workFlowGroup" class="test.action.WorkFlowGroupAction"
+		scope="prototype">
+		<property name="workFlowService" ref="workFlowService"></property>
+		<property name="qingJiaDAO" ref="qingJiaDAO"></property>
+		<property name="qingJiaHisDAO" ref="qingJiaHisDAO"></property>
+	</bean>
+
+
+</beans>

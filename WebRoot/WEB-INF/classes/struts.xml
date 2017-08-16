@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE struts PUBLIC
+    "-//Apache Software Foundation//DTD Struts Configuration 2.0//EN"
+    "http://struts.apache.org/dtds/struts-2.0.dtd">
+
+<struts> 
+	<constant name="struts.devMode" value="true" />
+	<constant name="struts.objectFactory" value="spring"></constant> 
+	<constant name="struts.i18n.encoding"  value="UTF-8"></constant> 
+	
+	<package name="default" extends="struts-default">
+   <default-action-ref name="notFound" />
+   <action name="notFound">
+    <result>/WEB-INF/page/error_page_404.html</result>
+   </action>
+</package>
+
+    <package name="authority" extends="struts-default" namespace="/">
+     
+    <!-- 定义一个拦截器 -->
+		<interceptors>
+			<interceptor name="authority"
+				class="test.interceptor.LoginInterceptor">
+			</interceptor>
+			<!-- 拦截器栈 -->
+			<interceptor-stack name="mydefault">
+				<interceptor-ref name="defaultStack" />
+				<interceptor-ref name="authority" />
+			</interceptor-stack>
+		</interceptors>
+
+        <!-- 配置默认拦截器栈 -->
+		<default-interceptor-ref name="mydefault" />
+		
+		<!-- 定义全局Result -->
+		<global-results>
+			<!-- 当返回login视图名时，转入/login.jsp页面 -->
+			<result name="login"  type="redirect" >/login.jsp</result>
+		</global-results> 
+	  
+        <action name="login" class="login" method="login">
+         <result name="success"  >/WEB-INF/page/main.jsp</result>
+         <result name="input"  type="redirect"  >/login.jsp</result>
+          <interceptor-ref name="defaultStack" />
+       </action>
+       
+        <action name="logout"  class="login"  method="logout">
+         <result name="success"  type="redirect" >/login.jsp</result>
+       </action>
+        
+       
+         <action name="startProcessInstance"  class="workFlowGroup" method="startProcessInstance">
+            <result name="success">/WEB-INF/page/success.jsp</result>
+        </action> 
+        
+         <action name="findMyPersonalTask"  class="workFlowGroup" method="findMyPersonalTask">
+            <result name="success">/WEB-INF/page/shenpi.jsp</result>
+        </action> 
+        
+        <action name="findMyShenpi"  class="workFlowGroup" method="findMyShenpi">
+            <result name="success">/WEB-INF/page/woshenpide.jsp</result>
+        </action>
+        
+         <action name="chuliJsp"  class="workFlowGroup" method="chuliJsp">
+            <result name="success">/WEB-INF/page/chuli.jsp</result>
+        </action> 
+        
+          <action name="shenqingJsp"  class="workFlowGroup" method="shenqingJsp">
+            <result name="success">/WEB-INF/page/shenqing.jsp</result>
+        </action>
+        
+           <action name="shenpi"  class="workFlowGroup" method="shenpi">
+            <result name="success">/WEB-INF/page/success.jsp</result>
+        </action> 
+        
+         <action name="shenpiMap"  class="workFlowGroup" method="shenpiMap">
+            <result name="success">/WEB-INF/page/success.jsp</result>
+        </action>  
+        
+       <action name="tsChartsInfo"  class="tsChartsInfo" method="add">
+            <result name="success">/WEB-INF/page/success.jsp</result>
+        </action> 
+        
+        <action name="getProcessPic" class="getProcessAction" method="getProcessPic">
+			<result name = "success" >/WEB-INF/page/pic.jsp</result>
+		</action>
+		
+		<action name="getProcessMap" class="getProcessAction" method="getProcessMap">
+			<result name = "success" >/WEB-INF/page/showImg.jsp</result>
+		</action>
+        
+    </package> 
+
+</struts>
