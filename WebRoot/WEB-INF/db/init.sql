@@ -1,4 +1,6 @@
--- 初始化数据脚本，也可以用hibernate制动生成
+-- 步骤：1、创建数据库；2、创建以下三张表；3、启动工程，会自动生成activiti相关的23张表；4、执行以下的插入脚本到activiti几个表中初始化数据
+
+-- 初始化数据脚本，也可以用hibernate制动生成(这三张表为手工创建的表，用来存储activiti之外的业务数据)
 CREATE TABLE ACT_QINGJIA (
         QID BIGINT NOT NULL AUTO_INCREMENT,
         DAYS BIGINT,
