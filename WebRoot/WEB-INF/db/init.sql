@@ -32,4 +32,40 @@ CREATE TABLE ACT_QINGJIA (
         XTYPE VARCHAR(100),
         PRIMARY KEY (CHART_ID)
     ) ENGINE=INNODB DEFAULT CHARSET=utf8;
+    
+    
+    
+-- activiti 表初始化用户角色数据    
+
+/*Table structure for table `act_id_group` */
+
+/*Data for the table `act_id_group` */
+
+insert  into `act_id_group`(`ID_`,`REV_`,`NAME_`,`TYPE_`) values ('bumenjingli',NULL,'bumenjingli',NULL);
+insert  into `act_id_group`(`ID_`,`REV_`,`NAME_`,`TYPE_`) values ('zongjinli',NULL,'zongjinli',NULL);
+insert  into `act_id_group`(`ID_`,`REV_`,`NAME_`,`TYPE_`) values ('zuzhang',NULL,'zuzhang',NULL);
+insert  into `act_id_group`(`ID_`,`REV_`,`NAME_`,`TYPE_`) values ('普通用户',NULL,'普通用户',NULL);
+
+/*Table structure for table `act_id_membership` */
+
+
+/*Data for the table `act_id_membership` */
+
+insert  into `act_id_membership`(`USER_ID_`,`GROUP_ID_`) values ('6','bumenjingli');
+insert  into `act_id_membership`(`USER_ID_`,`GROUP_ID_`) values ('7','zongjinli');
+insert  into `act_id_membership`(`USER_ID_`,`GROUP_ID_`) values ('5','zuzhang');
+insert  into `act_id_membership`(`USER_ID_`,`GROUP_ID_`) values ('1','普通用户');
+insert  into `act_id_membership`(`USER_ID_`,`GROUP_ID_`) values ('2','普通用户');
+insert  into `act_id_membership`(`USER_ID_`,`GROUP_ID_`) values ('3','普通用户');
+insert  into `act_id_membership`(`USER_ID_`,`GROUP_ID_`) values ('4','普通用户');
+
+/*Table structure for table `act_id_user` */
+
+insert  into `act_id_user`(`ID_`,`REV_`,`FIRST_`,`LAST_`,`EMAIL_`,`PWD_`,`PICTURE_ID_`) values ('1',1,'张','三',NULL,'1',NULL);
+insert  into `act_id_user`(`ID_`,`REV_`,`FIRST_`,`LAST_`,`EMAIL_`,`PWD_`,`PICTURE_ID_`) values ('2',1,'李','四',NULL,'1',NULL);
+insert  into `act_id_user`(`ID_`,`REV_`,`FIRST_`,`LAST_`,`EMAIL_`,`PWD_`,`PICTURE_ID_`) values ('3',1,'王','五',NULL,'1',NULL);
+insert  into `act_id_user`(`ID_`,`REV_`,`FIRST_`,`LAST_`,`EMAIL_`,`PWD_`,`PICTURE_ID_`) values ('4',1,'赵','六',NULL,NULL,NULL);
+insert  into `act_id_user`(`ID_`,`REV_`,`FIRST_`,`LAST_`,`EMAIL_`,`PWD_`,`PICTURE_ID_`) values ('5',1,'组','长',NULL,NULL,NULL);
+insert  into `act_id_user`(`ID_`,`REV_`,`FIRST_`,`LAST_`,`EMAIL_`,`PWD_`,`PICTURE_ID_`) values ('6',1,'经','理',NULL,NULL,NULL);
+insert  into `act_id_user`(`ID_`,`REV_`,`FIRST_`,`LAST_`,`EMAIL_`,`PWD_`,`PICTURE_ID_`) values ('7',1,'总','总',NULL,NULL,NULL);
 

@@ -19,12 +19,15 @@ import org.activiti.engine.identity.User;
 import org.activiti.engine.impl.RepositoryServiceImpl;
 import org.activiti.engine.impl.persistence.entity.ExecutionEntity;
 import org.activiti.engine.impl.persistence.entity.ProcessDefinitionEntity;
+import org.activiti.engine.impl.persistence.entity.UserEntity;
 import org.activiti.engine.impl.pvm.process.ActivityImpl;
 import org.activiti.engine.impl.pvm.process.ProcessDefinitionImpl;
 import org.activiti.engine.repository.Deployment;
 import org.activiti.engine.repository.ProcessDefinition;
 import org.activiti.engine.runtime.ProcessInstance;
 import org.activiti.engine.task.Task; 
+import org.apache.catalina.mbeans.UserMBean;
+
 
 public class WorkFlowService {
 
@@ -280,6 +283,11 @@ public class WorkFlowService {
 		u.setPassword("123456");
 		identityService.saveUser(u);
 	}
+	
+	public UserEntity getUserById(String userId){
+		return (UserEntity) identityService.createUserQuery().userId(userId).singleResult();
+	}
+	
 	/**
 	 * 新增用户组与用户关系
 	 */
@@ -397,4 +405,6 @@ public class WorkFlowService {
 	        }
 	       
 	    }
+	    
+	    
 }

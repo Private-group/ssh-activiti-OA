@@ -1,9 +1,16 @@
 package test.action;
 
+import org.activiti.engine.IdentityService;
+import org.activiti.engine.identity.User;
+
+import test.service.WorkFlowService;
+
 public   class LoginAction  extends MyBaseAction  {
  
 	private static final long serialVersionUID = 1L;
 	private String name; 
+	
+	private WorkFlowService workFlowService;
 	
 //      private void hehe(){
 //    	    ActionContext context = ActionContext.getContext();   
@@ -20,8 +27,10 @@ public   class LoginAction  extends MyBaseAction  {
 	public String login() throws Exception {
 	    
 	    String userName =this.getCurrentUserName();
+	    
 	    //防止用户登录后在主页刷新页面，导致name字段没值
 	    if(!(userName!=null&&!userName.trim().equals(""))){
+//	    	User user = workFlowService.getUserById(name);
 	    	this.setCurrentUserName(name);
 	    }
 	    userName =this.getCurrentUserName();

@@ -126,7 +126,7 @@ public class WorkFlowGroupAction extends MyBaseAction  {
  
 	
 	/**
-	 * 审批
+	 * 审批处理
 	 */
 	public String shenpiMap(){
 		//办结任务
